@@ -86,6 +86,7 @@
 ./ipm_get.pl -s 172.16.17.54 -u apmadmin -p apmpass -l -t -a
 # cloud:
 ./ipm_get.pl -s api.ibm.com -l -t -a
+
 Threshold Name: G_LZ_NEWTESTSIT_C
 Threshold Name: G_LZ_NEWTESTSIT_C2
 Threshold Name: G_LZ_NEWTESTSIT_C3
@@ -102,6 +103,7 @@ Threshold Name: F_MQ_TESTSIT
 ./ipm_get.pl -s 172.16.17.54 -u apmadmin -p apmpass -l -t -a -z
 # cloud
 ./ipm_get.pl -s api.ibm.com -l -t -a -z
+
 Threshold Name: G_LZ_NEWTESTSIT_C
 Threshold Name: G_LZ_NEWTESTSIT_C2
 Threshold Name: G_LZ_NEWTESTSIT_C3
@@ -118,6 +120,7 @@ Threshold Name: F_MQ_TESTSIT
 ./ipm_get.pl -s 172.16.17.54 -u apmadmin -p apmpass -l -t -n=Response_Time_Warning
 # cloud
 ./ipm_get.pl -s api.ibm.com -l -t -n=Response_Time_Warning
+
 Threshold Name: Response_Time_Warning
 
 # List threshold that does not exist
@@ -125,6 +128,7 @@ Threshold Name: Response_Time_Warning
 ./ipm_get.pl -s 172.16.17.54 -u apmadmin -p apmpass -l -t -n=Response_Time_Warning_bad
 # cloud
 ./ipm_get.pl -s api.ibm.com -l -t -n=Response_Time_Warning_bad
+
 Threshold "Response_Time_Warning_bad" not found.
 
 #    View all thresholds
@@ -216,4 +220,5 @@ My_Threshold_4: UIThresholdType: Linux OS
 ./ipm_get.pl -s 172.16.17.54 -u apmadmin -p apmpass -i -t -f /tmp/My_Threshold_9
 # cloud
 ./ipm_get.pl -s api.ibm.com -i -t -f /tmp/My_Threshold_9
+
 Threshold /tmp/My_Threshold_9 created SUCCESSFULLY
