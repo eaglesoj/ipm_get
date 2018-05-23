@@ -12,7 +12,7 @@
 #		This value then has to URL encoded before being stored in the client_secret_decoded file
 #
 # 2. For cloud APM:
-#		auth=<base64 encoded user:password to cloud APM>
-#		x-ibm-client-id=<client id>
-#		x-ibm-client-secret=<client secret>
-#		x-ibm-service-location=<cloud service location, typically is na>		
+#		auth={base64 encoded user:password to cloud APM}
+#		x-ibm-client-id={client id}
+#		x-ibm-client-secret={client secret}
+#		x-ibm-service-location={cloud service location, typically is na}		
