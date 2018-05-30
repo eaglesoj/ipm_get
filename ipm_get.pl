@@ -48,6 +48,21 @@
 #    $0 --server 172.16.16.54 --user apmadmin --password apmpass --import --threshold --file file
 #    OR
 #    $0 -s 172.16.17.54 -u apmadmin -p apmpass -i -t -f file\n
+#
+#    List all resourcegroups
+#    $0 --server 172.16.16.54 --user apmadmin --password apmpass --list --resourcegroup --all
+#    OR
+#    $0 -s 172.16.17.54 -u apmadmin -p apmpass -l -r -a
+#
+#    List all agents and their statuses  (uses resourcegroup API)
+#    $0 --server 172.16.16.54 --user apmadmin --password apmpass --list --resourcegroup --all
+#    OR
+#    $0 -s 172.16.17.54 -u apmadmin -p apmpass -l -r -a
+#
+#    List all offline agents  (including 'Deleted' agents - uses resourcegroup API)
+#    $0 --server 172.16.16.54 --user apmadmin --password apmpass --list --resourcegroup --all --offline
+#    OR
+#    $0 -s 172.16.17.54 -u apmadmin -p apmpass -l -r -a -o
 # 
 ########################################################################
 
@@ -64,6 +79,7 @@ my $list;
 my $view;
 my $threshold;
 my $resourcegroup;
+my $offline;
 my $all;
 my $name;
 my $apmserver;
@@ -105,7 +121,19 @@ my $usage="Usage: $0 --server 172.16.16.54 --user apmadmin --password apmpass --
 			Import threshold from file from a previous export
 			$0 --server 172.16.16.54 --user apmadmin --password apmpass --import --threshold --file file
 			OR
-			$0 -s 172.16.17.54 -u apmadmin -p apmpass -i -t -f file\n";
+			$0 -s 172.16.17.54 -u apmadmin -p apmpass -i -t -f file
+			List all resourcegroups
+			$0 --server 172.16.16.54 --user apmadmin --password apmpass --list --resourcegroup --all
+			OR
+			$0 -s 172.16.17.54 -u apmadmin -p apmpass -l -r -a
+			List all agents and their statuses  (uses resourcegroup API)
+			$0 --server 172.16.16.54 --user apmadmin --password apmpass --list --resourcegroup --all
+			OR
+			$0 -s 172.16.17.54 -u apmadmin -p apmpass -l -r -a
+			List all offline agents  (including 'Deleted' agents - uses resourcegroup API)
+			$0 --server 172.16.16.54 --user apmadmin --password apmpass --list --resourcegroup --all --offline
+			OR
+			$0 -s 172.16.17.54 -u apmadmin -p apmpass -l -r -a -o\n";
 
 
 GetOptions ('server=s' => \$apmserver,
@@ -115,6 +143,7 @@ GetOptions ('server=s' => \$apmserver,
             'view' => \$view,
             'threshold' => \$threshold,
             'resourcegroup' => \$resourcegroup,
+            'offline' => \$offline,
             'all' => \$all,
             'name=s' => \$name,
             'export' => \$export,
@@ -143,6 +172,9 @@ elsif ($list && !$threshold && !$resourcegroup && !$name && !$all) {
 elsif ($view && !$threshold && !$resourcegroup && !$name && !$all) {
 	die "When using -v, you must also specify either -t or -r and either -n or -a\n $usage";
 }
+elsif ($offline && (!$view || !$resourcegroup || !$all)) {
+	die "When using -o, you must also specify -v and -r and -a\n $usage";
+}
 elsif ($export && (!$threshold || !$name || !$createthresholdname || !$dir)) {
 	die "When using -e, you must also specify it, -c and -d\n $usage";
 }
@@ -151,7 +183,7 @@ elsif ($import && (!$threshold || !$file)) {
 }
 
 # format and print the data
-sub print_fields {
+sub print_threshold_fields {
     my @items = @{$_[0]};
     my $threshname;
     foreach my $item(@items) {
@@ -192,6 +224,22 @@ sub print_fields {
         }
         if (defined $item->{"_appliesToAgentType"}) {print "$threshname: AppliesToAgentType: " . $item->{"_appliesToAgentType"} . "\n"};
         if (defined $item->{"_uiThresholdType"}) {print "$threshname: UIThresholdType: " . $item->{"_uiThresholdType"} . "\n"};
+        print "\n";
+    }
+}
+
+sub print_resourcegroup_fields {
+    my @items = @{$_[0]};
+    my $resourcegroupname;
+    foreach my $item(@items) {
+        if (defined $item->{"keyIndexName"}) {
+            $resourcegroupname = $item->{"keyIndexName"};
+            print "$resourcegroupname: Name: " . $item->{"keyIndexName"} . "\n";            
+        }
+        if (defined $item->{"displayLabel"}) {print "$resourcegroupname: displayLabel: " . $item->{"displayLabel"} . "\n"};
+        if (defined $item->{"_id"}) {print "$resourcegroupname: ID: " . $item->{"_id"} . "\n"};
+        if (defined $item->{"_href"}) {print "$resourcegroupname: HRef: " . $item->{"_href"} . "\n"};
+        if (defined $item->{"online"}) {print "$resourcegroupname: online: " . $item->{"online"} . "\n"};
         print "\n";
     }
 }
@@ -287,13 +335,25 @@ if ($list) {
 			if ($apmserver =~ /api\.ibm\.com/) {
 				print "DEBUG: This is cloud APM\n" if $debug;
 				# APM cloud
-				print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_limit=50000 --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json'\n" if $debug;
-				$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_limit=50000 --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json' 2>/dev/null`;
+				if ($threshold) {
+					print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_limit=50000 --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json'\n" if $debug;
+					$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_limit=50000 --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json' 2>/dev/null`;
+				}
+				elsif ($resourcegroup) {
+					print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/topology/mgmt_artifacts?_filter=entityTypes:AgentGroup,AgentSystemGroup\\&_field=keyIndexName\\&_field=displayLabel\\&_limit=50000 --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json'\n" if $debug;
+					$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/topology/mgmt_artifacts?_filter=entityTypes:AgentGroup,AgentSystemGroup\\&_field=keyIndexName\\&_field=displayLabel\\&_limit=50000 --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json' 2>/dev/null`;
+				}
 			}
 			else {
 				# APM on-prem
-				print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_limit=50000 --header 'accept: application/json' --header \"authorization: Bearer $token\" --header 'content-type: application/json'\n" if $debug;
-				$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_limit=50000 --header 'accept: application/json' --header "authorization: Bearer $token" --header 'content-type: application/json' 2>/dev/null`;
+				if ($threshold) {
+					print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_limit=50000 --header 'accept: application/json' --header \"authorization: Bearer $token\" --header 'content-type: application/json'\n" if $debug;
+					$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_limit=50000 --header 'accept: application/json' --header "authorization: Bearer $token" --header 'content-type: application/json' 2>/dev/null`;
+				}
+				elsif ($resourcegroup) {
+					print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/topology/mgmt_artifacts?_filter=entityTypes:AgentGroup,AgentSystemGroup\\&_field=keyIndexName\\&_field=displayLabel\\&_limit=50000 --header 'accept: application/json' --header \"authorization: Bearer $token\" --header 'content-type: application/json'\n" if $debug;
+					$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/topology/mgmt_artifacts?_filter=entityTypes:AgentGroup,AgentSystemGroup\\&_field=keyIndexName\\&_field=displayLabel\\&_limit=50000 --header 'accept: application/json' --header "authorization: Bearer $token" --header 'content-type: application/json' 2>/dev/null`;
+				}
 			}
 			open (CACHE,">$cachefile") or die "can't open cache file $cachefile: $!\n";
 			print CACHE $json;
@@ -309,13 +369,25 @@ if ($list) {
         # fetch the data from IPM
 		if ($apmserver =~ /api\.ibm\.com/) {
 			# APM cloud
-			print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_filter=label=$name --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json'\n" if $debug;
-			$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_filter=label=$name --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json' 2>/dev/null`;
+			if ($threshold) {
+				print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_filter=label=$name --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json'\n" if $debug;
+				$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_filter=label=$name --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json' 2>/dev/null`;
+			}
+			elsif ($resourcegroup) {
+				print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/topology/mgmt_artifacts?_filter=entityTypes:AgentGroup,AgentSystemGroup\\&_field=keyIndexName\\&_field=displayLabel\\&_limit=50000\\&_filter=keyIndexName=$name --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json'\n" if $debug;
+				$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/topology/mgmt_artifacts?_filter=entityTypes:AgentGroup,AgentSystemGroup\\&_field=keyIndexName\\&_field=displayLabel\\&_limit=50000\\&_filter=keyIndexName=$name --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json' 2>/dev/null`;
+			}
 		}
 		else {
 			# APM on-prem
-			print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_filter=label=$name --header 'accept: application/json' --header \"authorization: Bearer $token\" --header 'content-type: application/json'\n" if $debug;
-			$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_filter=label=$name --header 'accept: application/json' --header "authorization: Bearer $token" --header 'content-type: application/json' 2>/dev/null`;
+			if ($threshold) {
+				print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_filter=label=$name --header 'accept: application/json' --header \"authorization: Bearer $token\" --header 'content-type: application/json'\n" if $debug;
+				$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_filter=label=$name --header 'accept: application/json' --header "authorization: Bearer $token" --header 'content-type: application/json' 2>/dev/null`;
+			}
+			elsif ($resourcegroup) {
+				print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/topology/mgmt_artifacts?_filter=entityTypes:AgentGroup,AgentSystemGroup\\&_field=keyIndexName\\&_field=displayLabel\\&_limit=50000\\&_filter=keyIndexName=$name --header 'accept: application/json' --header \"authorization: Bearer $token\" --header 'content-type: application/json'\n" if $debug;
+				$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/topology/mgmt_artifacts?_filter=entityTypes:AgentGroup,AgentSystemGroup\\&_field=keyIndexName\\&_field=displayLabel\\&_limit=50000\\&_filter=keyIndexName=$name --header 'accept: application/json' --header "authorization: Bearer $token" --header 'content-type: application/json' 2>/dev/null`;
+			}
 		}
         
         # parse the data into perl structure
@@ -327,67 +399,94 @@ if ($list) {
 }
 
 if ($view) {
-    if ($threshold) {
-        if ($all) {
-            # example curl:
-            # curl --tlsv1.2 -v -k \
-            # --request GET \
-            # --url https://172.16.17.54:8091/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_limit=50000  \
-            # --header 'accept: application/json' \
-            # --header 'authorization: Bearer qXnd8ZuvsO52DhjnU6oOrl1S3RuQ9lq2ZiK7bKl2' \
-            # --header 'content-type: application/json'
-            
-			# define cache filename based on this function
-			my $cachefile = $cachedir . "/" . "ipm_get_view_thresholds_all.tmp";
-			# check if cache was specified
-			if ($zcache) {
-				if (-e $cachefile) {
-					# cache file exists, and use cache specified, so get data from cache instead of from IPM
-					open (CACHE,$cachefile) or die "can't open cache file $cachefile: $!\n";
-					$json = <CACHE>;
-					close CACHE;
-				}
+	if ($all) {
+		# example curl:
+		# curl --tlsv1.2 -v -k \
+		# --request GET \
+		# --url https://172.16.17.54:8091/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_limit=50000  \
+		# --header 'accept: application/json' \
+		# --header 'authorization: Bearer qXnd8ZuvsO52DhjnU6oOrl1S3RuQ9lq2ZiK7bKl2' \
+		# --header 'content-type: application/json'
+		
+		# define cache filename based on this function
+		my $cachefile = $cachedir . "/" . "ipm_get_view_thresholds_all.tmp";
+		# check if cache was specified
+		if ($zcache) {
+			if (-e $cachefile) {
+				# cache file exists, and use cache specified, so get data from cache instead of from IPM
+				open (CACHE,$cachefile) or die "can't open cache file $cachefile: $!\n";
+				$json = <CACHE>;
+				close CACHE;
 			}
-			# no cache specified, so fetch the data from IPM, and cache it
-			else {
-				if ($apmserver =~ /api\.ibm\.com/) {
-					# APM cloud
+		}
+		# no cache specified, so fetch the data from IPM, and cache it
+		else {
+			if ($apmserver =~ /api\.ibm\.com/) {
+				# APM cloud
+				if ($threshold) {
 					print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_limit=50000 --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json'\n" if $debug;
 					$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_limit=50000 --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json' 2>/dev/null`;
 				}
-				else {
-					# APM on-prem
-					print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_limit=50000 --header 'accept: application/json' --header \"authorization: Bearer $token\" --header 'content-type: application/json'\n" if $debug;
-					$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_limit=50000 --header 'accept: application/json' --header "authorization: Bearer $token" --header 'content-type: application/json' 2>/dev/null`;
+				elsif ($resourcegroup) {
+					if ($offline) {
+						# get offline agents
+						print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/topology/mgmt_artifacts?_field=keyIndexName\\&_filter=entityTypes:Agent\\&_field=online\\&_filter=online!=Y\\&_limit=50000 --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json'\n" if $debug;
+						$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/topology/mgmt_artifacts?_field=keyIndexName\\&_filter=entityTypes:Agent\\&_field=online\\&_filter=online!=Y\\&_limit=50000 --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json' 2>/dev/null`;
+					}
+					else {
+						# get all agents
+						print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/topology/mgmt_artifacts?_field=keyIndexName\\&_filter=entityTypes:Agent\\&_field=online\\&_limit=50000 --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json'\n" if $debug;
+						$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/topology/mgmt_artifacts?_field=keyIndexName\\&_filter=entityTypes:Agent\\&_field=online\\&_limit=50000 --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json' 2>/dev/null`;
+					}
 				}
-				open (CACHE,">$cachefile") or die "can't open cache file $cachefile: $!\n";
-				print CACHE $json;
-				close CACHE;
-			}           
-            # parse the data into perl structure
-            my $decoded = decode_json($json);
-			if (defined $decoded->{'_items'}) {
-				@items = @{ $decoded->{'_items'} };
-			}
-        }
-        if ($name) {
-            # fetch the data from IPM
-			if ($apmserver =~ /api\.ibm\.com/) {
-				# APM cloud
-				print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_filter=label=$name --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json'\n" if $debug;
-				$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_filter=label=$name --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json' 2>/dev/null`;
 			}
 			else {
 				# APM on-prem
-				print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_filter=label=$name --header 'accept: application/json' --header \"authorization: Bearer $token\" --header 'content-type: application/json'\n" if $debug;
-				$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_filter=label=$name --header 'accept: application/json' --header "authorization: Bearer $token" --header 'content-type: application/json' 2>/dev/null`;
+				if ($threshold) {
+					print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_limit=50000 --header 'accept: application/json' --header \"authorization: Bearer $token\" --header 'content-type: application/json'\n" if $debug;
+					$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_limit=50000 --header 'accept: application/json' --header "authorization: Bearer $token" --header 'content-type: application/json' 2>/dev/null`;
+				}
+				elsif ($resourcegroup) {
+					if ($offline) {
+						# get all offline agents
+						print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/topology/mgmt_artifacts?_field=keyIndexName\\&_filter=entityTypes:Agent\\&_field=online\\&_filter=online!=Y\\&_limit=50000 --header 'accept: application/json' --header \"authorization: Bearer $token\" --header 'content-type: application/json'\n" if $debug;
+						$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/topology/mgmt_artifacts?_field=keyIndexName\\&_filter=entityTypes:Agent\\&_field=online\\&_filter=online!=Y\\&_limit=50000 --header 'accept: application/json' --header "authorization: Bearer $token" --header 'content-type: application/json' 2>/dev/null`;
+					}
+					else {
+						# get all agents
+						print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/topology/mgmt_artifacts?_field=keyIndexName\\&_filter=entityTypes:Agent\\&_field=online\\&_limit=50000 --header 'accept: application/json' --header \"authorization: Bearer $token\" --header 'content-type: application/json'\n" if $debug;
+						$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/topology/mgmt_artifacts?_field=keyIndexName\\&_filter=entityTypes:Agent\\&_field=online\\&_limit=50000 --header 'accept: application/json' --header "authorization: Bearer $token" --header 'content-type: application/json' 2>/dev/null`;
+
+					}
+				}
 			}
-            my $decoded = decode_json($json);
-			if (defined $decoded->{'_items'}) {
-				@items = @{ $decoded->{'_items'} };
-			}
-        }
-    }
+			open (CACHE,">$cachefile") or die "can't open cache file $cachefile: $!\n";
+			print CACHE $json;
+			close CACHE;
+		}           
+		# parse the data into perl structure
+		my $decoded = decode_json($json);
+		if (defined $decoded->{'_items'}) {
+			@items = @{ $decoded->{'_items'} };
+		}
+	}
+	if ($name) {
+		# fetch the data from IPM
+		if ($apmserver =~ /api\.ibm\.com/) {
+			# APM cloud
+			print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_filter=label=$name --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json'\n" if $debug;
+			$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver/perfmgmt/run/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_filter=label=$name --header 'x-ibm-service-location: $cserviceloc' --header 'Referer: https://api.ibm.com' --header 'authorization: Basic $auth' --header 'x-ibm-client-id: $cid' --header 'x-ibm-client-secret: $csecret' --header 'accept: application/json' --header 'content-type: application/json' 2>/dev/null`;
+		}
+		else {
+			# APM on-prem
+			print "DEBUG: running cmd: curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_filter=label=$name --header 'accept: application/json' --header \"authorization: Bearer $token\" --header 'content-type: application/json'\n" if $debug;
+			$json=`curl --tlsv1.2 -s -v -k --request GET --url https://$apmserver:8091/1.0/thresholdmgmt/threshold_types/itm_private_situation/thresholds?_filter=label=$name --header 'accept: application/json' --header "authorization: Bearer $token" --header 'content-type: application/json' 2>/dev/null`;
+		}
+		my $decoded = decode_json($json);
+		if (defined $decoded->{'_items'}) {
+			@items = @{ $decoded->{'_items'} };
+		}
+	}
 }
 
 ##################
@@ -485,7 +584,23 @@ if ($list) {
     
     # Resourcegroups
     if ($resourcegroup) {
-        # Not available at this time
+       if ($all) {
+            foreach my $item(@items) {
+                if (defined $item->{"keyIndexName"}) {print "Name: " . $item->{"keyIndexName"} . "\n"};
+            }
+        }
+        if ($name) {
+            my $found;
+            foreach my $item(@items) {
+                $found = 0;
+                if (defined $item->{"keyIndexName"} && $item->{"keyIndexName"} eq $name) {
+                    print "Name: " . $item->{"keyIndexName"} . "\n";
+                    $found = 1;
+                    last;
+                }
+            }
+            print "Resource \"$name\" not found.\n" unless $found;
+        }
     }
     
 }
@@ -494,11 +609,11 @@ if ($view) {
     
     # Thresholds
     if ($threshold) {
-       print_fields(\@items);
+       print_threshold_fields(\@items);
     }
     
     # Resourcegroups
     if ($resourcegroup) {
-       # Not available at this time 
+       print_resourcegroup_fields (\@items);
     }
 }
