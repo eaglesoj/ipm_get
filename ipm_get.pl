@@ -7,6 +7,7 @@
 #           Dec-19-2016 JJE: resourcegroup option stubbed in, but not
 #                               enabled by IBM in API at this time
 #           May-17-2018 JJE: updated to support APM SaaS (cloud)
+#           May-30-2018 JJE: updated to support resourcegroup API
 #
 ########################################################################
 #
